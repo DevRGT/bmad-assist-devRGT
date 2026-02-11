@@ -553,22 +553,26 @@ class BaseHandler(ABC):
         if provider_type == "helper":
             if not self.config.providers.helper:
                 raise ConfigError("Helper provider not configured")
-            provider_name = self.config.providers.helper.provider
-            return get_provider(provider_name)
+            from bmad_assist.core.provider_factory import create_provider
+
+            return create_provider(self.config.providers.helper)
 
         # Use phase_models resolution for master and multi
         phase_config = self._get_phase_config()
+
+        from bmad_assist.core.provider_factory import create_provider
 
         if isinstance(phase_config, list):
             # Multi-LLM: BaseHandler uses first provider
             if not phase_config:
                 raise ConfigError("No multi providers configured")
-            provider_name = phase_config[0].provider
+            # We want to create a provider from the first config in the list
+            # create_provider expects a single provider config (Master, Multi, or Helper)
+            # It handles fallbacks within that config object
+            return create_provider(phase_config[0])
         else:
             # Single-LLM: use directly
-            provider_name = phase_config.provider
-
-        return get_provider(provider_name)
+            return create_provider(phase_config)
 
     def get_model(self) -> str | None:
         """Get the display model name for logging (prefers model_name over model).

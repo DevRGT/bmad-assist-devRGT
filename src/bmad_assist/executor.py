@@ -179,8 +179,11 @@ def execute_qa_plan(
         prompt = _compile_qa_execute_prompt(project_path, epic_id, category)
         logger.debug("Compiled prompt length: %d chars", len(prompt))
 
-        # Get master provider
-        provider = get_provider(config.providers.master.provider)
+
+        # Get master provider (with fallbacks)
+        from bmad_assist.core.provider_factory import create_provider
+
+        provider = create_provider(config.providers.master)
 
         # Invoke LLM - this executes the tests
         logger.info("Invoking LLM to execute tests...")
@@ -188,6 +191,7 @@ def execute_qa_plan(
             prompt,
             model=config.providers.master.model,
             timeout=config.timeout * 3,  # Tests take longer
+            settings_file=config.providers.master.settings_path,
         )
 
         if result.exit_code != 0:
