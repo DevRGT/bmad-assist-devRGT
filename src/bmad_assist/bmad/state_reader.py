@@ -349,7 +349,6 @@ def _create_epics_from_stories(stories: list[EpicStory]) -> list[EpicDocument]:
 
     """
     from collections import defaultdict
-    import re
 
     epic_stories: dict[EpicId, list[EpicStory]] = defaultdict(list)
     for story in stories:
@@ -387,7 +386,6 @@ def _load_sprint_status_stories(bmad_path: Path) -> list[EpicStory] | None:
 
     """
     import yaml
-    import re
 
     possible_paths = _get_sprint_status_candidates(bmad_path)
 

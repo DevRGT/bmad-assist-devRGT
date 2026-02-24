@@ -175,11 +175,10 @@ def _execute_epic_teardown(
     teardown_phases = loop_config.epic_teardown
     from bmad_assist.core.state import EpicLifecycle
 
-    if state.epic_lifecycle == EpicLifecycle.QA_RELEASE:
-        if "hardening" in teardown_phases:
-            idx = teardown_phases.index("hardening")
-            teardown_phases = teardown_phases[idx + 1:]
-            logger.info("Resuming teardown from QA_RELEASE lifecycle: skipping phases up to hardening")
+    if state.epic_lifecycle == EpicLifecycle.QA_RELEASE and "hardening" in teardown_phases:
+        idx = teardown_phases.index("hardening")
+        teardown_phases = teardown_phases[idx + 1:]
+        logger.info("Resuming teardown from QA_RELEASE lifecycle: skipping phases up to hardening")
 
     logger.info(
         "Running %d epic teardown phases for epic %s: %s",

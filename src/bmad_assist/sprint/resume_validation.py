@@ -158,11 +158,9 @@ def _is_epic_done_in_sprint(
             # Check if this hardening story belongs to this epic
             # Can be "epic-X-hardening" or "X-Y-hardening"
             is_this_epic = False
-            if key == f"epic-{epic_str}-hardening":
+            if key == f"epic-{epic_str}-hardening" or key.startswith(f"{epic_str}-"):
                 is_this_epic = True
-            elif key.startswith(f"{epic_str}-"):
-                is_this_epic = True
-                
+
             if is_this_epic and entry.status != "done":
                 # Hardening exists but not done
                 return False
@@ -434,20 +432,19 @@ def validate_resume_state(
             epic_stories = epic_stories_loader(current_epic)
 
             # Inject stories from sprint_status that belong to this epic (like Story X.0)
-            prefix = f"{current_epic}."
-            
             # Helper to convert sprint keys to state story IDs
-            def key_to_story_id(k: str) -> str | None:
-                if k.startswith(prefix):
+            def key_to_story_id(k: str, epic_id: EpicId = current_epic) -> str | None:
+                pfx = f"{epic_id}."
+                if k.startswith(pfx):
                     return k
-                if k.startswith(f"{current_epic}-") and k.count("-") >= 1:
+                if k.startswith(f"{epic_id}-") and k.count("-") >= 1:
                     # Convert "6-8-hardening" to "6.8.hardening"
                     # But if it's "6-0-retrospective-hardening", convert to "6.0"
                     parts = k.split("-", 2)
-                    if len(parts) >= 2 and parts[0] == str(current_epic):
+                    if len(parts) >= 2 and parts[0] == str(epic_id):
                         return f"{parts[0]}.{parts[1]}"
-                if k == f"epic-{current_epic}-hardening":
-                    return f"{current_epic}.hardening"
+                if k == f"epic-{epic_id}-hardening":
+                    return f"{epic_id}.hardening"
                 return None
 
             sprint_epic_stories = []
@@ -455,7 +452,7 @@ def validate_resume_state(
                 mapped_id = key_to_story_id(s_id)
                 if mapped_id:
                     sprint_epic_stories.append(mapped_id)
-                    
+
             for s_id in sprint_epic_stories:
                 if s_id not in epic_stories:
                     epic_stories.append(s_id)
@@ -469,7 +466,7 @@ def validate_resume_state(
                     epic_val = m.group(1)
                     # Use formatted string for epic to ensure numeric epics sort correctly
                     epic_sort = f"{int(epic_val):04d}" if epic_val.isdigit() else epic_val
-                    
+
                     story_val = m.group(2)
                     if story_val == "hardening":
                         # Legacy epic-X-hardening goes at the very end

@@ -922,14 +922,21 @@ def _run_loop_body(
                     state, epic_list, epic_stories_loader, state_path
                 )
 
-                # Dispatch epic_completed event (even on teardown failure)
-                _dispatch_event(
-                    "epic_completed",
-                    project_path,
-                    state,
-                    duration_ms=epic_duration_ms,
-                    stories_completed=epic_stories_count,
+                # Determine if the epic was just resumed (consistency with main success path)
+                is_epic_resumed = (
+                    not is_project_complete 
+                    and new_state.current_epic == state.current_epic
                 )
+
+                if not is_epic_resumed:
+                    # Dispatch epic_completed event (even on teardown failure)
+                    _dispatch_event(
+                        "epic_completed",
+                        project_path,
+                        state,
+                        duration_ms=epic_duration_ms,
+                        stories_completed=epic_stories_count,
+                    )
 
                 if is_project_complete:
                     project_duration_ms = get_project_duration_ms(state)
@@ -1183,17 +1190,26 @@ def _run_loop_body(
                     state, epic_list, epic_stories_loader, state_path
                 )
 
-                # Story standalone-03 AC6: Dispatch epic_completed event
-                _dispatch_event(
-                    "epic_completed",
-                    project_path,
-                    state,
-                    duration_ms=epic_duration_ms,
-                    stories_completed=epic_stories_count,
+                # Determine if the epic was just resumed (e.g. by new stories from hardening)
+                # If advanced_state.current_epic is the same as state.current_epic and we didn't complete the project,
+                # it means the epic is not actually completed.
+                is_epic_resumed = (
+                    not is_project_complete 
+                    and advanced_state.current_epic == state.current_epic
                 )
 
+                if not is_epic_resumed:
+                    # Story standalone-03 AC6: Dispatch epic_completed event
+                    _dispatch_event(
+                        "epic_completed",
+                        project_path,
+                        state,
+                        duration_ms=epic_duration_ms,
+                        stories_completed=epic_stories_count,
+                    )
+
                 # Interactive continuation prompt at epic boundary (only if NOT project complete)
-                if not is_project_complete and not checkpoint_and_prompt(
+                if not is_project_complete and not is_epic_resumed and not checkpoint_and_prompt(
                     advanced_state, state_path, f"Epic {state.current_epic} complete. Continue?"
                 ):
                     return LoopExitReason.COMPLETED  # Graceful exit - state already saved
@@ -1214,12 +1230,19 @@ def _run_loop_body(
                     logger.info("Project complete after epic %s teardown", state.current_epic)
                     return LoopExitReason.COMPLETED
 
-                # Continue with next epic
+                # Continue with next epic OR resumed epic
                 state = advanced_state
-                # Reset timing for new epic
-                start_epic_timing(state)
+                
+                if not is_epic_resumed:
+                    # Reset timing for new epic
+                    start_epic_timing(state)
                 start_story_timing(state)
-                logger.info("Advanced to epic %s after teardown", state.current_epic)
+                
+                if is_epic_resumed:
+                    logger.info("Resumed epic %s after teardown added new stories", state.current_epic)
+                else:
+                    logger.info("Advanced to epic %s after teardown", state.current_epic)
+                
                 if _single_phase_exit is not None:
                     save_state(state, state_path)
                     return _single_phase_exit
@@ -1307,14 +1330,21 @@ def _run_loop_body(
                 state, epic_list, epic_stories_loader, state_path
             )
 
-            # Story standalone-03 AC6: Dispatch epic_completed event
-            _dispatch_event(
-                "epic_completed",
-                project_path,
-                state,
-                duration_ms=epic_duration_ms,
-                stories_completed=epic_stories_count,
+            # Determine if the epic was just resumed (epic-scope consistency)
+            is_epic_resumed = (
+                not is_project_complete 
+                and new_state.current_epic == state.current_epic
             )
+
+            if not is_epic_resumed:
+                # Story standalone-03 AC6: Dispatch epic_completed event
+                _dispatch_event(
+                    "epic_completed",
+                    project_path,
+                    state,
+                    duration_ms=epic_duration_ms,
+                    stories_completed=epic_stories_count,
+                )
 
             if is_project_complete:
                 # Story standalone-03 AC7: Dispatch project_completed event
@@ -1423,14 +1453,21 @@ def _run_loop_body(
                     state, epic_list, epic_stories_loader, state_path
                 )
 
-                # Dispatch epic_completed event
-                _dispatch_event(
-                    "epic_completed",
-                    project_path,
-                    state,
-                    duration_ms=epic_duration_ms,
-                    stories_completed=epic_stories_count,
+                # Determine if the epic was just resumed (unexpected teardown path)
+                is_epic_resumed = (
+                    not is_project_complete 
+                    and new_state.current_epic == state.current_epic
                 )
+
+                if not is_epic_resumed:
+                    # Dispatch epic_completed event
+                    _dispatch_event(
+                        "epic_completed",
+                        project_path,
+                        state,
+                        duration_ms=epic_duration_ms,
+                        stories_completed=epic_stories_count,
+                    )
 
                 if is_project_complete:
                     project_duration_ms = get_project_duration_ms(state)

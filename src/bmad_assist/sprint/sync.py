@@ -336,13 +336,13 @@ def sync_state_to_sprint(
     # Step 1: Update current story status based on phase (AC2)
     # Exclude epic-level phases: they do not progress a single story's lifecycle.
     from bmad_assist.core.config import get_loop_config
-    
+
     loop_config = get_loop_config()
     is_epic_level = False
     if state.current_phase is not None:
         phase_str = state.current_phase.value
         is_epic_level = phase_str in loop_config.epic_setup or phase_str in loop_config.epic_teardown
-    
+
     if not is_epic_level and state.current_story is not None and state.current_phase is not None:
         target_status = PHASE_TO_STATUS.get(state.current_phase)
         if target_status is not None:

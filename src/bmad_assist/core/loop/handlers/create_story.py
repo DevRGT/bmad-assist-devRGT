@@ -71,7 +71,7 @@ def _find_story_file(state: State) -> Path | None:
     import re
     hardening_pattern = re.compile(r"^epic-(.+)-hardening$")
     match = hardening_pattern.match(state.current_story)
-    
+
     if match:
         story_num = "hardening"
     elif "." in state.current_story:
@@ -89,7 +89,7 @@ def _find_story_file(state: State) -> Path | None:
     # also handle 'epic-X-hardening.md' which is exact
     if match:
         pattern = f"epic-{state.current_epic}-hardening.md"
-        
+
     matches = sorted(stories_dir.glob(pattern))
     return matches[0] if matches else None
 
@@ -164,16 +164,17 @@ def _write_rescued_story(state: State, content: str, title: str | None) -> Path:
         Path to the written story file.
 
     """
+    import re
+
     from bmad_assist.core.io import atomic_write
     from bmad_assist.sprint.generator import generate_story_slug
-    import re
 
     paths = get_paths()
     stories_dir = paths.stories_dir
 
     hardening_pattern = re.compile(r"^epic-(.+)-hardening$")
     match = hardening_pattern.match(state.current_story or "")
-    
+
     if match:
         filename = f"{state.current_story}.md"
     else:
@@ -184,7 +185,7 @@ def _write_rescued_story(state: State, content: str, title: str | None) -> Path:
             else "1"
         )
         filename = f"{state.current_epic}-{story_num}-{slug}.md"
-        
+
     story_path = stories_dir / filename
 
     atomic_write(story_path, content)

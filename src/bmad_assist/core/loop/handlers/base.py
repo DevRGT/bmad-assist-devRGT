@@ -201,7 +201,7 @@ class BaseHandler(ABC):
         """
         if not story_id:
             return None
-            
+
         if "." in story_id:
             return story_id.split(".")[1]
         return None
