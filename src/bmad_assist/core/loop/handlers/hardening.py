@@ -299,6 +299,11 @@ class HardeningHandler(BaseHandler):
             state.completed_epics.remove(epic_id)
             logger.info("Cleared epic %s from completed_epics for re-run", epic_id)
 
+        from bmad_assist.core.state import EpicLifecycle
+
+        state.epic_lifecycle = EpicLifecycle.HARDENING
+        logger.info("Set epic lifecycle to HARDENING for epic %s", epic_id)
+
         return result
 
     # ------------------------------------------------------------------

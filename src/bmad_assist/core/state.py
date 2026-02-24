@@ -75,6 +75,7 @@ DEFAULT_STATE_PATH: str = "~/.bmad-assist/state.yaml"
 __all__ = [
     "State",
     "Phase",
+    "EpicLifecycle",
     "PreflightStateEntry",
     "save_state",
     "load_state",
@@ -105,6 +106,15 @@ logger = logging.getLogger(__name__)
 
 # Suffix for temporary files during atomic write
 TEMP_FILE_SUFFIX = ".tmp"
+
+
+class EpicLifecycle(Enum):
+    """Macro lifecycle states for an epic."""
+
+    DEVELOPMENT = "development"
+    TEARDOWN = "teardown"
+    HARDENING = "hardening"
+    QA_RELEASE = "qa_release"
 
 
 class Phase(Enum):
@@ -274,6 +284,7 @@ class State(BaseModel):
     qa_category: str = "A"  # Test category for QA phases: "A", "B", or "all"
     # Configurable loop architecture: track epic setup completion
     epic_setup_complete: bool = False  # Reset to False on epic change
+    epic_lifecycle: EpicLifecycle = EpicLifecycle.DEVELOPMENT
 
 
 def save_state(state: State, path: str | Path) -> None:

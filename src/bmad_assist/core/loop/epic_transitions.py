@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from bmad_assist.core.exceptions import StateError
-from bmad_assist.core.state import Phase, State, save_state
+from bmad_assist.core.state import EpicLifecycle, Phase, State, save_state
 from bmad_assist.core.types import EpicId
 
 logger = logging.getLogger(__name__)
@@ -278,6 +278,7 @@ def advance_to_next_epic(
                     "current_story": last_story,
                     "current_phase": first_teardown_phase,
                     "epic_setup_complete": False,  # Reset for new epic
+                    "epic_lifecycle": EpicLifecycle.DEVELOPMENT,
                     "updated_at": now,
                 }
             )
@@ -299,6 +300,7 @@ def advance_to_next_epic(
             "current_story": first_incomplete,
             "current_phase": Phase.CREATE_STORY,
             "epic_setup_complete": False,  # Reset for new epic
+            "epic_lifecycle": EpicLifecycle.DEVELOPMENT,
             "updated_at": now,
         }
     )

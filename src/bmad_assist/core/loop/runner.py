@@ -1162,7 +1162,7 @@ def _run_loop_body(
 
             if is_epic_complete:
                 # Run all epic teardown phases (retrospective, qa_plan_*, etc.)
-                logger.info("Epic %s stories complete, running teardown phases", state.current_epic)
+                logger.info("Epic %s stories complete, running teardown phases", new_state.current_epic)
                 state, _teardown_result = _execute_epic_teardown(
                     new_state, state_path, project_path
                 )
