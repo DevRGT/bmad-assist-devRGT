@@ -34,8 +34,9 @@ class TestHardeningCompiler:
         mission = compiler._build_mission(workflow_ir, resolved)
         
         assert "Target: Epic 5 Hardening Triage" in mission
-        assert "Assess action items and decide" in mission
-        assert "no_action / direct_fix / story_needed" in mission
+        assert "Assess action items with structured triage fields" in mission
+        assert "has_direct_fixes + story_needed" in mission
+        assert "Handle mixed outcomes" in mission
 
     def test_compile_resolves_variables_without_next_epic_id(self, compiler):
         """Verify compile flow doesn't compute next_epic_id."""

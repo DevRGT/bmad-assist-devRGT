@@ -1,11 +1,10 @@
 """HARDENING phase handler.
 
-Hybrid triage handler that assesses retrospective action items and decides:
-- no_action: No actionable items — epic closes immediately.
-- direct_fix: Trivial fixes applied inline — no story generated.
-- story_needed: Complex items require a dedicated hardening story.
+Hybrid triage handler that assesses retrospective action items and can do both:
+- direct fixes for trivial items (inline), and
+- hardening story generation for complex items.
 
-The hardening story is now attached to the CURRENT epic (epic-{N}-hardening.md)
+The hardening story is attached to the CURRENT epic ({epic_id}-{story_num}-hardening.md)
 to avoid collisions with prerequisite Story 0 entries and orphaned tasks.
 
 """
@@ -26,8 +25,66 @@ from bmad_assist.sprint import parse_sprint_status, write_sprint_status
 
 logger = logging.getLogger(__name__)
 
-# Valid triage decisions the LLM can return
-_VALID_DECISIONS = frozenset({"no_action", "direct_fix", "story_needed"})
+# Legacy decision values retained for backward compatibility.
+_LEGACY_DECISIONS = frozenset({"no_action", "direct_fix", "story_needed", "mixed"})
+
+
+def _fallback_triage_decision() -> dict[str, Any]:
+    """Return safe fallback triage payload (story-first)."""
+    return {
+        "decision": "story_needed",
+        "reason": "",
+        "has_direct_fixes": False,
+        "story_needed": True,
+        "fixes_applied": [],
+        "story_content": "",
+    }
+
+
+def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+    """Best-effort bool coercion for triage fields."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1"}:
+            return True
+        if normalized in {"false", "no", "0"}:
+            return False
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
+
+
+def _normalize_fixes(value: Any) -> list[str]:
+    """Normalize fixes_applied into a clean list of non-empty strings."""
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return [cleaned] if cleaned else []
+
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip()
+        if cleaned:
+            normalized.append(cleaned)
+    return normalized
+
+
+def _derive_triage_decision(has_direct_fixes: bool, story_needed: bool) -> str:
+    """Derive a canonical decision label from normalized booleans."""
+    if has_direct_fixes and story_needed:
+        return "mixed"
+    if has_direct_fixes:
+        return "direct_fix"
+    if story_needed:
+        return "story_needed"
+    return "no_action"
 
 
 def _parse_triage_decision(raw_output: str) -> dict[str, Any]:
@@ -39,17 +96,21 @@ def _parse_triage_decision(raw_output: str) -> dict[str, Any]:
     Expected JSON shape::
 
         {
-            "decision": "no_action" | "direct_fix" | "story_needed",
+            "has_direct_fixes": true | false,
+            "story_needed": true | false,
             "reason": "<human-readable justification>",
-            "fixes_applied": ["<description>", ...],  // only for direct_fix
-            "story_content": "<markdown>"              // only for story_needed
+            "fixes_applied": ["<description>", ...],
+            "story_content": "<markdown>"
         }
+
+    Legacy ``decision`` values (``no_action`` / ``direct_fix`` /
+    ``story_needed`` / ``mixed``) are still accepted.
 
     Args:
         raw_output: Raw LLM output.
 
     Returns:
-        Parsed dict, or a fallback ``{"decision": "story_needed"}`` when
+        Normalized triage dict, or a story-first fallback when
         the structured block cannot be found/parsed (backward compat).
 
     """
@@ -59,53 +120,79 @@ def _parse_triage_decision(raw_output: str) -> dict[str, Any]:
     # If the content doesn't look like JSON, fall back.
     if not content or not content.lstrip().startswith("{"):
         # Try to find a JSON block anywhere in the output
-        match = re.search(
-            r"\{[^{}]*\"decision\"\s*:\s*\"[^\"]+\"[^{}]*\}",
-            raw_output,
-            re.DOTALL,
-        )
+        match = re.search(r"\{.*\}", raw_output, re.DOTALL)
         if match:
             content = match.group(0)
         else:
             logger.info("No triage decision block found — falling back to story_needed")
-            return {"decision": "story_needed"}
+            return _fallback_triage_decision()
 
     try:
         data = cast(dict[str, Any], json.loads(content))
     except json.JSONDecodeError:
         # Content from extract_report may have trailing text; try narrow regex on raw
-        match = re.search(
-            r"\{[^{}]*\"decision\"\s*:\s*\"[^\"]+\"[^{}]*\}",
-            raw_output,
-            re.DOTALL,
-        )
+        match = re.search(r"\{.*\}", raw_output, re.DOTALL)
         if match:
             try:
                 data = cast(dict[str, Any], json.loads(match.group(0)))
             except json.JSONDecodeError as exc2:
                 logger.warning("Failed to parse triage JSON: %s — falling back to story_needed", exc2)
-                return {"decision": "story_needed"}
+                return _fallback_triage_decision()
         else:
             logger.warning("Failed to parse triage JSON — falling back to story_needed")
-            return {"decision": "story_needed"}
+            return _fallback_triage_decision()
 
-    decision = data.get("decision", "story_needed")
-    if decision not in _VALID_DECISIONS:
-        logger.warning("Unknown triage decision '%s' — falling back to story_needed", decision)
-        data["decision"] = "story_needed"
+    has_direct_fixes = _coerce_bool(data.get("has_direct_fixes"), default=False)
+    story_needed = _coerce_bool(data.get("story_needed"), default=False)
 
-    return data
+    legacy_decision = data.get("decision")
+    if isinstance(legacy_decision, str):
+        normalized_decision = legacy_decision.strip().lower()
+        if normalized_decision in _LEGACY_DECISIONS:
+            if normalized_decision in {"direct_fix", "mixed"}:
+                has_direct_fixes = True
+            if normalized_decision in {"story_needed", "mixed"}:
+                story_needed = True
+        else:
+            logger.warning(
+                "Unknown triage decision '%s' — falling back to story_needed",
+                legacy_decision,
+            )
+            story_needed = True
+
+    fixes_applied = _normalize_fixes(data.get("fixes_applied"))
+    if fixes_applied:
+        has_direct_fixes = True
+
+    story_content = data.get("story_content")
+    if not isinstance(story_content, str):
+        story_content = ""
+    if story_content.strip():
+        story_needed = True
+
+    reason = data.get("reason")
+    if not isinstance(reason, str):
+        reason = ""
+
+    return {
+        "decision": _derive_triage_decision(has_direct_fixes, story_needed),
+        "reason": reason,
+        "has_direct_fixes": has_direct_fixes,
+        "story_needed": story_needed,
+        "fixes_applied": fixes_applied,
+        "story_content": story_content,
+    }
 
 
 class HardeningHandler(BaseHandler):
     """Handler for HARDENING phase — hybrid triage.
 
     Reads the last retrospective report and prompts the LLM to triage
-    action items.  Depending on the triage decision:
+    action items, then executes a pipeline:
 
-    * **no_action** — Nothing to do, epic closes immediately.
-    * **direct_fix** — Trivial items fixed inline, no story file.
-    * **story_needed** — Complex items → ``epic-{N}-hardening.md`` created.
+    * record direct fixes (if any),
+    * create hardening story for complex work (if any),
+    * mark hardening done when no story is generated.
 
     """
 
@@ -155,8 +242,11 @@ class HardeningHandler(BaseHandler):
         """Execute hardening phase with hybrid triage.
 
         1. Invoke LLM to triage retrospective action items.
-        2. Parse triage decision.
-        3. Handle each decision path (no_action / direct_fix / story_needed).
+        2. Parse triage payload (supports mixed direct-fix + story output).
+        3. Run pipeline:
+           - Step 1: record direct fixes if ``fixes_applied`` has items.
+           - Step 2: create hardening story if complex work is present.
+           - Step 3: if no story created, mark hardening done.
 
         """
         epic_id = state.current_epic
@@ -176,19 +266,51 @@ class HardeningHandler(BaseHandler):
         # Parse triage decision
         triage = _parse_triage_decision(raw_output)
         decision = triage.get("decision", "story_needed")
+        fixes_applied = _normalize_fixes(triage.get("fixes_applied", []))
+        story_needed = _coerce_bool(triage.get("story_needed"), default=False)
+        story_content = triage.get("story_content", "")
+        has_story_content = isinstance(story_content, str) and bool(story_content.strip())
+
         result.outputs["hardening_decision"] = decision
         result.outputs["hardening_reason"] = triage.get("reason", "")
+        result.outputs["hardening_has_direct_fixes"] = bool(fixes_applied)
+        result.outputs["hardening_story_needed"] = story_needed or has_story_content
 
-        logger.info("Hardening triage decision: %s (reason: %s)", decision, triage.get("reason", "-"))
+        logger.info(
+            "Hardening triage parsed: decision=%s has_direct_fixes=%s story_needed=%s",
+            decision,
+            bool(fixes_applied),
+            story_needed or has_story_content,
+        )
 
-        if decision == "no_action":
-            return self._handle_no_action(result, epic_id)
+        # Step 1: record direct fixes (if any)
+        fixes_recorded = False
+        if fixes_applied:
+            triage["fixes_applied"] = fixes_applied
+            self._handle_direct_fix(result, epic_id, triage)
+            fixes_recorded = True
 
-        if decision == "direct_fix":
-            return self._handle_direct_fix(result, epic_id, triage)
+        # Step 2: create hardening story for complex work (if needed)
+        story_created = False
+        if story_needed or has_story_content:
+            story_result = self._handle_story_needed(result, state, triage, raw_output)
+            if not story_result.success:
+                return story_result
+            result = story_result
+            story_created = True
 
-        # decision == "story_needed" (or fallback)
-        return self._handle_story_needed(result, state, triage, raw_output)
+        if story_created:
+            result.outputs["hardening_decision"] = "mixed" if fixes_recorded else "story_needed"
+            return result
+
+        # Step 3: no story was created -> hardening is done.
+        if fixes_recorded:
+            self._mark_hardening_done(epic_id)
+            result.outputs["hardening_decision"] = "direct_fix"
+            return result
+
+        result.outputs["hardening_decision"] = "no_action"
+        return self._handle_no_action(result, epic_id)
 
     # ------------------------------------------------------------------
     # Decision handlers
@@ -210,15 +332,14 @@ class HardeningHandler(BaseHandler):
         epic_id: Any,
         triage: dict[str, Any],
     ) -> PhaseResult:
-        """Trivial fixes already applied by LLM — mark done, no story."""
-        fixes = triage.get("fixes_applied", [])
+        """Record trivial fixes already applied by LLM."""
+        fixes = _normalize_fixes(triage.get("fixes_applied", []))
         logger.info(
             "Hardening: %d trivial fix(es) applied directly for epic %s",
             len(fixes),
             epic_id,
         )
         result.outputs["hardening_fixes_applied"] = fixes
-        self._mark_hardening_done(epic_id)
         return result
 
     def _get_hardening_story_num(self, epic_id: Any) -> int:
@@ -229,17 +350,19 @@ class HardeningHandler(BaseHandler):
         max_y = 0
         existing_hardening_y = None
         if sprint_status_path.exists():
-            from bmad_assist.sprint.classifier import _EPIC_STORY_PATTERN
             from bmad_assist.sprint import parse_sprint_status
+            from bmad_assist.sprint.classifier import _EPIC_STORY_PATTERN
+
             try:
                 sprint_status = parse_sprint_status(sprint_status_path)
                 for key in sprint_status.entries:
                     match = _EPIC_STORY_PATTERN.match(key)
                     if match and match.group(1) == str(epic_id):
                         y = int(match.group(2))
-                        if key.endswith("-hardening"):
-                            if existing_hardening_y is None or y > existing_hardening_y:
-                                existing_hardening_y = y
+                        if key.endswith("-hardening") and (
+                            existing_hardening_y is None or y > existing_hardening_y
+                        ):
+                            existing_hardening_y = y
                         if y > max_y:
                             max_y = y
             except Exception as e:
@@ -288,13 +411,13 @@ class HardeningHandler(BaseHandler):
         # Register in sprint-status as backlog
         self._register_hardening_in_sprint(epic_id, next_y, status="backlog")
 
-        # Cleanup state for re-runs: if story or epic was already marked done in a 
+        # Cleanup state for re-runs: if story or epic was already marked done in a
         # previous run, we must un-complete them here so the loop picks it up again.
         story_id = f"{epic_id}.{next_y}"
         if story_id in state.completed_stories:
             state.completed_stories.remove(story_id)
             logger.info("Cleared %s from completed_stories for re-run", story_id)
-            
+
         if epic_id in state.completed_epics:
             state.completed_epics.remove(epic_id)
             logger.info("Cleared epic %s from completed_epics for re-run", epic_id)
@@ -348,6 +471,7 @@ class HardeningHandler(BaseHandler):
                 # Using EPIC_STORY since it has a standard numeric format now
                 entry_type=EntryType.EPIC_STORY,
                 source="hardening",
+                comment=None,
             )
 
             if story_key in sprint_status.entries:
@@ -383,4 +507,3 @@ class HardeningHandler(BaseHandler):
 
         except Exception as e:
             logger.error("Failed to update sprint-status for hardening: %s", e)
-

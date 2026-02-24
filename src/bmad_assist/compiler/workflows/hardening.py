@@ -316,7 +316,10 @@ class HardeningCompiler:
         mission = (
             f"{base_description}\n\n"
             f"Target: Epic {epic_num} Hardening Triage\n"
-            f"Assess action items and decide: no_action / direct_fix / story_needed."
+            "Assess action items with structured triage fields: "
+            "has_direct_fixes + story_needed. "
+            "Handle mixed outcomes by applying trivial fixes immediately and "
+            "generating story content only for complex work."
         )
 
         return mission

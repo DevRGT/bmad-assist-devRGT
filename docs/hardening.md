@@ -7,12 +7,11 @@ The hardening feature in `bmad-assist` provides automated remediation and triage
 The hardening phase operates as part of the `epic_teardown` sequence (configurable via the `loop.yaml` configuration). It requires that the `retrospective` phase has accurately generated an action items report for the epic.
 
 1. **Triage**: The `HardeningHandler` reads the retrospective report and instructs the Master LLM to triage the action items.
-2. **Decision Making**: The LLM evaluates the findings and must output **exactly one** of three decisions:
-   - `no_action`: There are no actionable items; the epic proceeds.
-   - `direct_fix`: *All* items are trivial (e.g., typos, simple config changes). They are fixed inline and no story is generated.
-   - `story_needed`: There are complex items requiring dedicated work. A new story is generated (e.g., `epic-7-4-hardening.md`).
-   
-   > **Note on Mixed Items**: Because the triage decision is mutually exclusive, if an epic contains both trivial *and* complex items, the handler will fall back to `story_needed`. This means trivial items will be bundled into the generated hardening story alongside the complex ones, running through the full development loop.
+2. **Decision Making**: The LLM outputs structured triage fields (`has_direct_fixes`, `story_needed`, `fixes_applied`, `story_content`) and the handler executes them as a pipeline:
+   - If `fixes_applied` contains items, trivial fixes are recorded as directly applied.
+   - If `story_needed` is true (or `story_content` is provided), a hardening story is generated for complex work only (e.g., `7-4-hardening.md`).
+   - If both are present, mixed retrospectives are handled in one pass: trivial items are fixed immediately and the generated story stays focused on complex items.
+   - If neither is present, hardening is marked done with no story.
 3. **Execution Pause**: If a hardening story is generated, the epic's teardown execution is suspended, preventing subsequent QA phases from starting prematurely.
 4. **Implementation**: The newly generated hardening story is injected into the active epic. The loop cleanly re-enters at the first story-level phase (typically `CREATE_STORY`), where the generated markdown is refined and validated before moving through the rest of the loop (`VALIDATE_STORY` -> `DEV_STORY` -> ... -> `CODE_REVIEW_SYNTHESIS`).
 5. **QA Resumption**: Upon completion of the hardening story, the epic lifecycle resumes from where it left off in the teardown sequence, cleanly executing the QA pipeline phases.
@@ -24,7 +23,7 @@ The integration of the hardening story relies heavily on `EpicLifecycle` state m
 ### 1. `HardeningHandler` (`src/bmad_assist/core/loop/handlers/hardening.py`)
 - Executes the LLM triage via the prompt template defined in `instructions.md`.
 - Parses the structured `HARDENING_TRIAGE` JSON block.
-- Generates the story file `epic-{epic_id}-{story_num}-hardening.md` if `decision == "story_needed"`.
+- Generates the story file `{epic_id}-{story_num}-hardening.md` when complex follow-up work is required (`story_needed=true`, including mixed outcomes).
 - Registers the story into `sprint-status.yaml` as an `EPIC_STORY` entry with the status `backlog`.
 - Transitions the state: `state.epic_lifecycle = EpicLifecycle.HARDENING`.
 

@@ -148,8 +148,11 @@ HARDENING_TRIAGE_MARKERS = ReportMarkers(
     start_marker="<!-- HARDENING_TRIAGE_START -->",
     end_marker="<!-- HARDENING_TRIAGE_END -->",
     fallback_patterns=[
-        # JSON object with decision key
+        # Legacy JSON object with decision key
         r'\{\s*"decision"\s*:',
+        # Boolean triage schema keys
+        r'\{\s*"has_direct_fixes"\s*:',
+        r'\{\s*"story_needed"\s*:',
     ],
     name="hardening-triage",
 )

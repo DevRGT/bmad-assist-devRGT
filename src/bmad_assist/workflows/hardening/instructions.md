@@ -14,7 +14,8 @@
     You MUST output a raw JSON object wrapped EXACTLY in these HTML markers:
     <!-- HARDENING_TRIAGE_START -->
     {{
-        "decision": "...",
+        "has_direct_fixes": true,
+        "story_needed": false,
         "reason": "...",
         "fixes_applied": [],
         "story_content": "..."
@@ -22,11 +23,12 @@
     <!-- HARDENING_TRIAGE_END -->
 
     **Decision Rules:**
-    1. `"decision": "no_action"`: Use this if there are no actionable items or technical debt from the retrospective.
-    2. `"decision": "direct_fix"`: Use this if the items are trivial (e.g., typos, simple config changes) and you can fix them directly inline. Include descriptions of what you fixed in the `"fixes_applied"` array.
-    3. `"decision": "story_needed"`: Use this if complex issues require dedicated work. Provide the full markdown for the new hardening story in the `"story_content"` field.
+    1. Set `"has_direct_fixes": true` only when you actually fixed trivial items inline (e.g., typos, simple config changes). List each fix in `"fixes_applied"`.
+    2. Set `"story_needed": true` only when complex issues still require dedicated implementation planning. In that case, provide the full markdown hardening story in `"story_content"`.
+    3. If there are no actionable items, set both booleans to `false`, set `"fixes_applied": []`, and set `"story_content": ""`.
+    4. If there are both trivial and complex items, fix the trivial items immediately (listing them in `fixes_applied`) AND provide a markdown story for ONLY the complex items (in `story_content`). Do NOT put trivial items in the `story_content`.
 
-    **Story Content Requirements (if decision is story_needed):**
+    **Story Content Requirements (if `story_needed` is true):**
     The `"story_content"` must be a valid markdown string (escape internal quotes or newlines as needed for JSON) describing the required work, including an Acceptance Criteria checklist. Set the status of the story to `backlog` (or `ready-for-dev` if immediately actionable).
 
     **CRITICAL:** 
