@@ -68,7 +68,6 @@ from bmad_assist.deep_verify.integration import (
     run_deep_verify_code_review_batch,
     save_dv_findings_for_synthesis,
 )
-from bmad_assist.providers import get_provider
 from bmad_assist.providers.base import BaseProvider
 from bmad_assist.security.agent import run_security_review
 from bmad_assist.security.integration import save_security_findings_for_synthesis
@@ -706,8 +705,10 @@ async def run_code_review_phase(
     multi_configs: list[MultiProviderConfig] = (
         multi_configs_raw if isinstance(multi_configs_raw, list) else []
     )
+    from bmad_assist.core.provider_factory import create_provider
+
     for idx, multi_config in enumerate(multi_configs):
-        provider = get_provider(multi_config.provider)
+        provider = create_provider(multi_config)
         # Use display_model (model_name if set) for logging, model for CLI invocation
         reviewer_id = f"{multi_config.provider}-{multi_config.display_model}"
         # Staggered start: each task waits idx * delay before starting
@@ -740,7 +741,10 @@ async def run_code_review_phase(
     # When phase_models.code_review is defined, user has full control - no auto-add
     phase_has_override = config.phase_models and "code_review" in config.phase_models
     if not phase_has_override:
-        master_provider = get_provider(config.providers.master.provider)
+        # Import create_provider if not already imported in this scope (it is from loop above, but to be safe/clean)
+        from bmad_assist.core.provider_factory import create_provider
+
+        master_provider = create_provider(config.providers.master)
         master_id = f"master-{config.providers.master.display_model}"
         master_color_index = len(multi_configs)
         # Staggered start for master: uses next index after all multi configs

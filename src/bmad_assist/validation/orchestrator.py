@@ -55,6 +55,7 @@ from bmad_assist.core.config.models.providers import (
 )
 from bmad_assist.core.exceptions import BmadAssistError
 from bmad_assist.core.io import get_original_cwd, save_prompt
+from bmad_assist.core.provider_factory import create_provider
 from bmad_assist.core.retry import invoke_with_timeout_retry
 
 # get_paths() NOT used - validations_dir derived from project_path directly
@@ -64,7 +65,6 @@ from bmad_assist.core.types import EpicId
 # Story 26.16: Deep Verify integration
 from bmad_assist.deep_verify.core.types import DeepVerifyValidationResult
 from bmad_assist.deep_verify.integration import run_deep_verify_validation
-from bmad_assist.providers import get_provider
 from bmad_assist.providers.base import BaseProvider
 from bmad_assist.validation.anonymizer import (
     AnonymizedValidation,
@@ -547,7 +547,7 @@ async def run_validation_phase(
             mc.thinking,
         )
     for idx, multi_config in enumerate(multi_configs):
-        provider = get_provider(multi_config.provider)
+        provider = create_provider(multi_config)
         # Use display_model (model_name if set) for logging, model for CLI invocation
         provider_id = f"{multi_config.provider}-{multi_config.display_model}"
         # Staggered start: each task waits idx * delay before starting
@@ -580,7 +580,7 @@ async def run_validation_phase(
     # When phase_models.validate_story is defined, user has full control - no auto-add
     phase_has_override = config.phase_models and "validate_story" in config.phase_models
     if not phase_has_override:
-        master_provider = get_provider(config.providers.master.provider)
+        master_provider = create_provider(config.providers.master)
         master_id = f"master-{config.providers.master.display_model}"
         master_color_index = len(multi_configs)
         # Staggered start for master: uses next index after all multi configs

@@ -93,6 +93,10 @@ class MasterProviderConfig(BaseModel):
         description="Reasoning effort for codex: minimal, low, medium, high, xhigh",
         json_schema_extra={"security": "safe", "ui_widget": "dropdown"},
     )
+    fallbacks: list["MasterProviderConfig"] = Field(
+        default_factory=list,
+        description="List of fallback providers to try if this provider fails",
+    )
 
     @property
     def display_model(self) -> str:
@@ -159,6 +163,10 @@ class MultiProviderConfig(BaseModel):
         description="Reasoning effort for codex: minimal, low, medium, high, xhigh",
         json_schema_extra={"security": "safe", "ui_widget": "dropdown"},
     )
+    fallbacks: list["MultiProviderConfig"] = Field(
+        default_factory=list,
+        description="List of fallback providers to try if this provider fails",
+    )
 
     @property
     def display_model(self) -> str:
@@ -210,6 +218,10 @@ class HelperProviderConfig(BaseModel):
         None,
         description="Path to provider settings JSON (tilde expanded)",
         json_schema_extra={"security": "dangerous"},
+    )
+    fallbacks: list["HelperProviderConfig"] = Field(
+        default_factory=list,
+        description="List of fallback providers to try if this provider fails",
     )
 
     @property
